@@ -5,10 +5,34 @@
  *  Author: Komputer_4
  */ 
 
-#include <avr/io.h>
 
-char ruch = 0b01000000;
+/*
+Jak wygl¹daj¹ koordynaty:
+  7 6 5 4 3 2 1 0
+0 1 1 1 1 1 1 1 1 
+1 1 0 0 0 0 0 0 1
+2 1 0 0 0 X 0 0 1
+3 1 0 0 0 0 0 0 1
+4 1 0 0 0 0 0 0 1
+5 1 0 0 0 0 0 0 1
+6 1 0 0 0 0 0 0 1
+7 1 1 1 1 1 1 1 1
+*/
+
+#include <avr/io.h>
+#include <stdio.h>
+#include <util/delay.h>
+#include "max7219.h"
+
+//char ruch = 0b01000000;
 char ekran[8];
+//char kierunek;
+//int step = 0;
+char ball_x = 1;
+char ball_y = 1;
+signed char ball_krok_x = PRAWO;
+signed char ball_krok_y = DOL;
+
 
 
 
@@ -23,16 +47,17 @@ void spi_send(int address, int data)
 	PORTB	|=	(1	<<	PB2); //zakonczenie transmisji, SS na wysoki
 }
 
-void spi_send_display()
+void spi_send_display(void)
 {
 	for(int i = 0; i<8; i++)	spi_send(i+1, ekran[i]);
 }
 
-void frame()
+void frame(void)
 {
-	ekran[0] = 0b11111111;
+	update();
+	ekran[0] =	0b11111111;
 	for(int i = 1; i<7; i++)	ekran[i] |=  0b10000001;
-	ekran[7] = 0b11111111;
+	ekran[7] =	0b11111111;
 }
 
 void spi_init(void)
@@ -54,8 +79,172 @@ void spi_init(void)
 	SPCR	|=	(1	<<	SPE);
 }
 
-void dot_dot(char step)
+void timer1_init(void)
 {
+	//set FASTPWM ICR1 8-bit on timer1 (timer2 occupies OC2/MOSI pin used by spi_init() )
+	TCCR1A	|=	(1	<<	WGM11);
+	TCCR1B	|=	(1	<<	WGM12);
+	TCCR1B	|=	(1	<<	WGM13);
+	//prescaler
+	TCCR1B	|=	(1	<<	CS11);
+	// OC1A pin onto exit (PB1)
+	DDRB	|=	(1	<<	PB1);
+	// set OC1
+	
+	ICR1  = 450;
+	OCR1A = ICR1/2;
+	// FASTPWM non-inverting
+	TCCR1A	|=	(1	<<	COM1A1);
+}
+
+
+
+void dot_dot(void)
+{
+	cls();
+
+	
+	
+	/*
+  7 6 5 4 3 2 1 0
+0 1 1 1 1 1 1 1 1 
+1 1 0 0 0 0 0 0 1
+2 1 0 0 0 0 0 0 1
+3 1 0 0 Y 0 0 0 1
+4 1 X 0 0 0 0 0 1
+5 1 0 0 0 0 0 0 1
+6 1 0 0 0 0 0 0 1
+7 1 1 1 1 1 1 1 1
+*/
+	/*
+	//ruch pi³ki oœ X
+	if(ball_krok_x > 0 && ball_x > 5)		ball_krok_x = LEWO;  //granica lewa
+	else if(ball_krok_x < 0 && ball_x < 2 )	ball_krok_x = PRAWO;	//granica prawa
+	ball_x += ball_krok_x;
+
+	//ruch pi³ki oœ Y
+	if(ball_krok_y > 0 && ball_y > 5)		ball_krok_x = GORA;  //granica lewa
+	else if(ball_krok_y < 0 && ball_y < 2 )	ball_krok_x = DOL;	//granica prawa
+	ball_y += ball_krok_y;
+	
+	
 	frame();
+	
+	// nanieœ pi³kê na  ekran
+	update();
+
 	spi_send_display();
+	//cls();*/
+}
+	
+
+
+
+
+
+void display_coords()
+{
+	printf("Ball's X coordinate: %d",ball_x);
+	printf("Ball's Y coordinate: %d",ball_y);
+}
+
+void update()
+{
+	ekran[(int)ball_y] |= (1 << ball_x);
+}
+
+void cls(void)
+{
+	for(int i = 0; i<8; i++)
+	{
+		ekran[i] = 0b00000000;
+	}
+}
+
+
+
+void dec2bin(uint8_t a)
+{
+	for(int8_t z = 0; z<8; z++)
+	{
+		if(a & (1<<z))  printf("1");
+		else printf("0");
+	}
+}
+void fullsend(void)
+{
+	
+	frame();
+	update();
+	spi_send_display();
+	cls();
+}
+void neuronactivation(void)
+{
+
+	for(int i = 0; i < 5; i++)
+	{
+		ball_y++;
+		fullsend();
+		_delay_ms(200);
+	}
+	for(int i = 0; i <5; i++)
+	{
+		ball_y--;
+		ball_x++;
+		fullsend();
+		_delay_ms(200);
+	}
+	for(int i = 0; i < 5; i++)
+	{
+		ball_y++;
+		fullsend();
+		_delay_ms(200);
+	}
+	for(int i = 0; i <5; i++)
+	{
+		ball_y--;
+		ball_x--;
+		fullsend();
+		_delay_ms(200);
+	}
+	frame();
+	update();
+	spi_send_display();
+	cls();
+}
+// the microcontroller counts 125000 times a second
+void soundtimer1(float hz)
+{
+	ICR1 = (int)(125000/hz);
+	OCR1A = ICR1/2;
+}
+
+void music1()
+{
+	for(int i = 0; i < 3 ; i++)
+	{
+		soundtimer1(261.63);
+		_delay_ms(200);
+		soundtimer1(246.94);
+		_delay_ms(200);
+		soundtimer1(220.00);
+		_delay_ms(200);
+	}
+	_delay_ms(600);
+	soundtimer1(493.88);
+	_delay_ms(400);
+	soundtimer1(440.00);
+	_delay_ms(600);
+	soundtimer1(392.00);
+	_delay_ms(400);
+	soundtimer1(440.00);
+	_delay_ms(600);
+	soundtimer1(370);
+	_delay_ms(400);
+	soundtimer1(329.63);
+	_delay_ms(800);
+	
+	
+	
 }

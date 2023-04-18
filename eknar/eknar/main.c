@@ -13,7 +13,7 @@
 
 int main(void)
 {
-	
+	timer1_init();
 	spi_init();
 	
 	spi_send(SHUTDOWN_REG, NORMAL_OPERATION_S);	
@@ -30,14 +30,14 @@ int main(void)
 
 	
 	
-	#define PRAWO 0
-	#define LEWO 1
-	char kierunek = PRAWO;
+	
 	
     while (1) 
     {
-		dot_dot(1);
-		//spi_send(0x05, ruch | 0b10000001);
+		
+		//neuronactivation();
+		//dot_dot();
+		/*spi_send(0x05, ruch | 0b10000001);
 		
 		if(kierunek == PRAWO) 
 		{
@@ -50,8 +50,8 @@ int main(void)
 			if(ruch == 0b01000000) kierunek = PRAWO;
 		}
 		
-		
-		_delay_ms(200);
+		*/
+		music1();
     }
 }
 
